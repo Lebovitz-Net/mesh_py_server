@@ -1,6 +1,6 @@
 # handlers/config_handlers.py
 from flask import jsonify, request
-from api_utils import safe
+from src.api.api_utils import safe
 from src.db.query_handlers import query_handlers
 
 @safe

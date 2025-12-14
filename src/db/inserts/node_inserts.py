@@ -2,10 +2,10 @@
 
 import json
 import time
-from src.meshtastic.utils.database import db
-from src.servers.sse_emitters import emit_node_update
+from src.db.database import db
+from src.server.sse_emitters import emit_node_update
 from src.meshtastic.utils.node_mapping import set_mapping, set_channel_mapping
-from src.meshtastic.utils.contact_inserts import contact_inserts
+from src.db.inserts.contact_inserts import contact_inserts
 
 
 def _insert_node(node: dict, timestamp: int = None) -> None:
@@ -173,9 +173,9 @@ def _insert_my_info(packet: dict) -> None:
 
 # Exported object of insert functions
 node_inserts = {
-    "insert_node": _insert_node,
-    "insert_node_metrics": _insert_node_metrics,
-    "insert_position": _insert_position,
-    "upsert_node_info": _upsert_node_info,
-    "insert_my_info": _insert_my_info,
+    "insertNode": _insert_node,
+    "insertNode_metrics": _insert_node_metrics,
+    "insertPosition": _insert_position,
+    "upsertNodeInfo": _upsert_node_info,
+    "insertMyInfo": _insert_my_info,
 }

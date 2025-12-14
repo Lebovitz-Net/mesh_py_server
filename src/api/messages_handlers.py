@@ -1,9 +1,9 @@
 # handlers/messages_handlers.py
 from flask import jsonify, request
-from api_utils import safe, generate_message_id
+from src.api.api_utils import safe, generate_message_id
 from src.db.query_handlers import query_handlers
-from src.db.insert_handlers import insert_handlers
-from MeshCore.meshcoreRequests import MeshcoreRequests
+from src.db.insert_handlers import InsertHandlers
+from src.meshcore.meshcore_requests import MeshcoreRequests
 
 @safe
 def list_messages_handler():
@@ -48,7 +48,7 @@ def send_message_handler():
         "options": body.get("options"),
     }
 
-    inserted = insert_handlers["insertMessage"](shaped)
+    inserted = InsertHandlers["insertMessage"](shaped)
     return jsonify({"ok": True, "message": inserted})
 
 handlers = {

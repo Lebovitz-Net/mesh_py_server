@@ -1,76 +1,80 @@
-import signal
-import asyncio
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from aiohttp import web
+import aiohttp_cors
 
-from config import config
-from api.runtime_config_routes import router as runtime_config_router
-from api.routes import register_routes
-from sse import sse_router, sse_handler, shutdown as sse_shutdown
-from meshtastic.utils.proto_utils import init_proto_types
-from startup_meshcore import start_meshcore
-from startup_meshtastic import start_meshtastic
-from startup_mqtt import start_mqtt_server
-from api.services_manager import shutdown as services_shutdown
+from src.server.startup_meshcore import start_meshcore, shutdown_meshcore
+from src.server.startup_meshtastic import start_meshtastic, shutdown_meshtastic
+from src.server.startup_mqtt import start_mqtt_server, shutdown_mqtt_server
+from src.server.sse import sse_events, shutdown as sse_shutdown
+from src.api.routes import register_routes
+from src.api.services_manager import shutdown as services_shutdown
 
-# ✅ import global_state
-from api.global_state import global_state
+async def root(request):
+    return web.Response(text="MeshManager v2 is running")
 
-app = FastAPI()
+async def get_sse_events(request):
+    events = await sse_events()
+    return web.json_response(events)
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_methods=["GET", "POST"],
-    allow_credentials=True,
-)
 
-# --- Routes ---
-app.include_router(sse_router, prefix="/sse")
-app.include_router(runtime_config_router, prefix="/api/v1/config")
-register_routes(app)
+async def startup(app: web.Application):
+    # loop = app.loop
+    # set_event_loop(loop)
+    # set_socket_loop(loop)
 
-@app.get("/")
-async def root():
-    return "MeshManager v2 is running"
+    print("step 1 start_meshcore")
+    app["meshcore"] = await start_meshcore()
 
-@app.get("/sse/events")
-async def sse_events():
-    return await sse_handler()
+    print("step 2 start_meshtastic")
+    # app["meshtastic"] = await start_meshtastic()
 
-# --- Startup ---
-async def startup_event():
-    await init_proto_types()
-    # ✅ assign into global_state instead of raw globals
-    # global_state.mesh = await start_meshtastic()   # enable if needed
-    global_state.meshcore = await start_meshcore()
-    global_state.mqtt_client = await start_mqtt_server()
+    print("step 3 start_mqtt_server")
+    app["mqtt_client"] = await start_mqtt_server()
 
-app.add_event_handler("startup", startup_event)
+    print("✅ completed startups")
 
-# --- Graceful Shutdown ---
-def shutdown_handler(sig, frame):
-    print(f"🔻 Received {sig}, shutting down...")
 
-    if global_state.mqtt_client:
-        global_state.mqtt_client.disconnect()
+async def shutdown(app: web.Application):
+    print("🔻 Shutting down...")
 
-    if global_state.meshcore:
-        global_state.meshcore["request"].close()
-        if global_state.meshcore.get("stoploop"):
-            global_state.meshcore["stoploop"]()
+    if "mqtt_client" in app:
+        shutdown_mqtt_server(app["mqtt_client"])
+        print("MQTT client shut down.")
 
-    if global_state.mesh:
-        global_state.mesh.end()
+    if "meshcore" in app:
+        shutdown_meshcore(app["meshcore"]["meshcore"])
+        print("Meshcore shut down.")
+
+    if "meshtastic" in app:
+        shutdown_meshtastic(app["meshtastic"])
+        print("Meshtastic shut down.")
 
     sse_shutdown()
-    services_shutdown(sig)
+    services_shutdown("shutdown")
+    print("SSE and services shut down.")
+    print("✅ Server shutdown complete.")
 
-signal.signal(signal.SIGINT, shutdown_handler)
-signal.signal(signal.SIGTERM, shutdown_handler)
 
-if __name__ == "__main__":
-    # ✅ stash API server reference in global_state
-    global_state.api_server = uvicorn.run(app, host="0.0.0.0", port=config.api.port)
+def create_app() -> web.Application:
+    app = web.Application()
+
+    # routes
+    app.router.add_get("/", root)
+    app.router.add_get("/sse/events", get_sse_events)
+    register_routes(app)
+
+    # hooks
+    app.on_startup.append(startup)
+    app.on_cleanup.append(shutdown)
+
+    # CORS
+    cors = aiohttp_cors.setup(app, defaults={
+        "http://localhost:5173": aiohttp_cors.ResourceOptions(
+            allow_credentials=True,
+            expose_headers="*",
+            allow_headers="*",
+        )
+    })
+    for route in list(app.router.routes()):
+        cors.add(route)
+
+    return app

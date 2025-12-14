@@ -1,71 +1,120 @@
-# routes.py
-from flask import Flask, request, jsonify
-from handlers import api_handlers
-from config.config import get_node_ip, set_node_ip
+from aiohttp import web
+from src.api.handlers import api_handlers
+from src.config.config import get_node_ip, set_node_ip
 
-def register_routes(app: Flask):
+
+def register_routes(app: web.Application):
+
     # --- Root ---
-    app.add_url_rule("/", "health", api_handlers["health"], methods=["GET"])
+    app.router.add_get("/", api_handlers["health"])
 
     # --- Runtime Config ---
-    @app.route("/api/v1/node-ip", methods=["GET"])
-    def get_node_ip_route():
-        return jsonify({"ip": get_node_ip()})
+    async def get_node_ip_route(request):
+        return web.json_response({"ip": get_node_ip()})
+    app.router.add_get("/api/v1/node-ip", get_node_ip_route)
 
-    @app.route("/api/v1/node-ip", methods=["POST"])
-    def set_node_ip_route():
-        ip = request.json.get("ip")
+    async def set_node_ip_route(request):
+        body = await request.json()
+        ip = body.get("ip")
         if not ip or ":" not in ip:
-            return jsonify({"error": 'Invalid IP format. Expected "host:port".'}), 400
+            return web.json_response(
+                {"error": 'Invalid IP format. Expected "host:port".'},
+                status=400,
+            )
         set_node_ip(ip)
-        return jsonify({"success": True, "ip": ip})
+        return web.json_response({"success": True, "ip": ip})
+    app.router.add_post("/api/v1/node-ip", set_node_ip_route)
 
     # --- System ---
-    app.add_url_rule("/api/v1/config", "getConfig", api_handlers["getConfig"], methods=["GET"])
-    app.add_url_rule("/api/v1/version", "getVersion", api_handlers["getVersion"], methods=["GET"])
-    app.add_url_rule("/api/v1/health", "getHealth", api_handlers["getHealth"], methods=["GET"])
+    app.router.add_get("/api/v1/config", api_handlers["getConfig"])
+    app.router.add_get("/api/v1/version", api_handlers["getVersion"])
+    app.router.add_get("/api/v1/health", api_handlers["getHealth"])
 
     # --- Nodes ---
-    app.add_url_rule("/api/v1/nodes/<id>/connections", "listConnections", api_handlers["listConnections"], methods=["GET"])
-    app.add_url_rule("/api/v1/nodes/<id>", "getNodeHandler", api_handlers["getNodeHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/nodes/<id>", "deleteNodeHandler", api_handlers["deleteNodeHandler"], methods=["DELETE"])
-    app.add_url_rule("/api/v1/nodes", "listNodesHandler", api_handlers["listNodesHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/channels/<id>", "listChannels", api_handlers["listChannels"], methods=["GET"])
+    async def list_connections(request):
+        return await api_handlers["listConnections"](request.match_info["id"])
+    app.router.add_get("/api/v1/nodes/{id}/connections", list_connections)
+
+    async def get_node_handler(request):
+        return await api_handlers["getNodeHandler"](request.match_info["id"])
+    app.router.add_get("/api/v1/nodes/{id}", get_node_handler)
+
+    async def delete_node_handler(request):
+        return await api_handlers["deleteNodeHandler"](request.match_info["id"])
+    app.router.add_delete("/api/v1/nodes/{id}", delete_node_handler)
+
+    app.router.add_get("/api/v1/nodes", api_handlers["listNodesHandler"])
+
+    async def list_channels(request):
+        return await api_handlers["listChannels"](request.match_info["id"])
+    app.router.add_get("/api/v1/channels/{id}", list_channels)
 
     # --- Messages ---
-    app.add_url_rule("/api/v1/messages", "listMessagesHandler", api_handlers["listMessagesHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/messages", "sendMessageHandler", api_handlers["sendMessageHandler"], methods=["POST"])
+    app.router.add_get("/api/v1/messages", api_handlers["listMessagesHandler"])
+
+    async def send_message_handler(request):
+        body = await request.json()
+        return await api_handlers["sendMessageHandler"](body)
+    app.router.add_post("/api/v1/messages", send_message_handler)
 
     # --- My Info ---
-    app.add_url_rule("/api/v1/myinfo", "listMyInfoHandler", api_handlers["listMyInfoHandler"], methods=["GET"])
+    app.router.add_get("/api/v1/myinfo", api_handlers["listMyInfoHandler"])
 
     # --- Contacts ---
-    app.add_url_rule("/api/v1/contacts", "listContactsHandler", api_handlers["listContactsHandler"], methods=["GET"])
+    app.router.add_get("/api/v1/contacts", api_handlers["listContactsHandler"])
 
     # --- Packets ---
-    app.add_url_rule("/api/v1/packets", "listPacketsHandler", api_handlers["listPacketsHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/packets/<id>", "getPacketHandler", api_handlers["getPacketHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/packets", "injectPacketHandler", api_handlers["injectPacketHandler"], methods=["POST"])
+    app.router.add_get("/api/v1/packets", api_handlers["listPacketsHandler"])
+
+    async def get_packet_handler(request):
+        return await api_handlers["getPacketHandler"](request.match_info["id"])
+    app.router.add_get("/api/v1/packets/{id}", get_packet_handler)
+
+    async def inject_packet_handler(request):
+        body = await request.json()
+        return await api_handlers["injectPacketHandler"](body)
+    app.router.add_post("/api/v1/packets", inject_packet_handler)
 
     # --- Metrics ---
-    app.add_url_rule("/api/v1/nodes/<id>/packet-logs", "getPacketLogs", api_handlers["getPacketLogs"], methods=["GET"])
-    app.add_url_rule("/api/v1/nodes/<id>/telemetry", "getTelemetry", api_handlers["getTelemetry"], methods=["GET"])
-    app.add_url_rule("/api/v1/nodes/<id>/events", "getEvents", api_handlers["getEvents"], methods=["GET"])
-    app.add_url_rule("/api/v1/metrics", "getMetrics", api_handlers["getMetrics"], methods=["GET"])
+    async def get_packet_logs(request):
+        return await api_handlers["getPacketLogs"](request.match_info["id"])
+    app.router.add_get("/api/v1/nodes/{id}/packet-logs", get_packet_logs)
+
+    async def get_telemetry(request):
+        return await api_handlers["getTelemetry"](request.match_info["id"])
+    app.router.add_get("/api/v1/nodes/{id}/telemetry", get_telemetry)
+
+    async def get_events(request):
+        return await api_handlers["getEvents"](request.match_info["id"])
+    app.router.add_get("/api/v1/nodes/{id}/events", get_events)
+
+    app.router.add_get("/api/v1/metrics", api_handlers["getMetrics"])
 
     # --- Diagnostics & Logs ---
-    app.add_url_rule("/api/v1/logs", "getLogsHandler", api_handlers["getLogsHandler"], methods=["GET"])
+    app.router.add_get("/api/v1/logs", api_handlers["getLogsHandler"])
 
     # --- Config ---
-    app.add_url_rule("/api/v1/config/full", "getFullConfigHandler", api_handlers["getFullConfigHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/config/<id>", "getConfigHandler", api_handlers["getConfigHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/configs", "listAllConfigsHandler", api_handlers["listAllConfigsHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/module-config/<id>", "getModuleConfigHandler", api_handlers["getModuleConfigHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/module-configs", "listAllModuleConfigsHandler", api_handlers["listAllModuleConfigsHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/metadata/<key>", "getMetadataByKeyHandler", api_handlers["getMetadataByKeyHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/metadata", "listAllMetadataHandler", api_handlers["listAllMetadataHandler"], methods=["GET"])
-    app.add_url_rule("/api/v1/files", "listFileInfoHandler", api_handlers["listFileInfoHandler"], methods=["GET"])
+    app.router.add_get("/api/v1/config/full", api_handlers["getFullConfigHandler"])
+
+    async def get_config_handler(request):
+        return await api_handlers["getConfigHandler"](request.match_info["id"])
+    app.router.add_get("/api/v1/config/{id}", get_config_handler)
+
+    app.router.add_get("/api/v1/configs", api_handlers["listAllConfigsHandler"])
+
+    async def get_module_config_handler(request):
+        return await api_handlers["getModuleConfigHandler"](request.match_info["id"])
+    app.router.add_get("/api/v1/module-config/{id}", get_module_config_handler)
+
+    app.router.add_get("/api/v1/module-configs", api_handlers["listAllModuleConfigsHandler"])
+
+    async def get_metadata_by_key_handler(request):
+        return await api_handlers["getMetadataByKeyHandler"](request.match_info["key"])
+    app.router.add_get("/api/v1/metadata/{key}", get_metadata_by_key_handler)
+
+    app.router.add_get("/api/v1/metadata", api_handlers["listAllMetadataHandler"])
+    app.router.add_get("/api/v1/files", api_handlers["listFileInfoHandler"])
 
     # --- Control ---
-    app.add_url_rule("/api/v1/restart", "restartServicesHandler", api_handlers["restartServicesHandler"], methods=["POST"])
-    app.add_url_rule("/api/v1/reload-config", "reloadConfigHandler", api_handlers["reloadConfigHandler"], methods=["POST"])
+    app.router.add_post("/api/v1/restart", api_handlers["restartServicesHandler"])
+    app.router.add_post("/api/v1/reload-config", api_handlers["reloadConfigHandler"])

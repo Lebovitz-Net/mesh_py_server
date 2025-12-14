@@ -1,8 +1,8 @@
 # handlers/nodes_handlers.py
 from flask import jsonify, request
-from api_utils import safe
+from src.api.api_utils import safe
 from src.db.query_handlers import query_handlers
-from src.db.insert_handlers import insert_handlers
+from src.db.insert_handlers import InsertHandlers
 
 @safe
 def list_nodes_handler():
@@ -17,7 +17,7 @@ def get_node_handler(id):
 
 @safe
 def delete_node_handler(id):
-    insert_handlers["deleteNode"](id)
+    InsertHandlers["deleteNode"](id)
     return jsonify({"success": True})
 
 @safe

@@ -3,6 +3,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from external.meshcore_py.src.events import get_event_loop
 
 sse_router = APIRouter()
 sse_clients = set()
@@ -15,7 +16,7 @@ async def event_stream(request: Request):
     sse_clients.add(queue)
 
     # Initial heartbeat (ping)
-    await queue.put(f"data: {json.dumps({'type': 'ping', 'timestamp': int(asyncio.get_event_loop().time()*1000)})}\n\n")
+    await queue.put(f"data: {json.dumps({'type': 'ping', 'timestamp': int(get_event_loop().time()*1000)})}\n\n")
 
     try:
         while True:

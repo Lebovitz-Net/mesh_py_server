@@ -1,16 +1,18 @@
 import asyncio
 import socket
 import time
+import traceback
 
-from external.meshcore.packet import Packet
-from external.meshcore.buffer_reader import BufferReader
-from external.meshcore.connection.tcp_connection import TcpConnection
-from external.meshcore.constants import Constants
-from .packets.port_nums import portNums, get_name
+from external.meshcore_py.src.packets import Packet
+from external.meshcore_py.src.buffer.buffer_reader import BufferReader
+from external.meshcore_py.src.connection.tcp_connection import TCPConnection
+from external.meshcore_py.src.constants import Constants
+from .packets.port_nums import port_nums, get_name
 from .meshcore_requests import MeshcoreRequests
+from asyncio import get_running_loop
 
 
-class MeshcoreConnection(TcpConnection):
+class MeshcoreConnection(TCPConnection):
     def __init__(self, host: str, port: int, handler):
         super().__init__(host, port)
         self.read_buffer = bytearray()
@@ -41,7 +43,7 @@ class MeshcoreConnection(TcpConnection):
         self._reconnect_attempts += 1
         delay = min(3000 * self._reconnect_attempts, 15000) / 1000.0  # seconds
 
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         loop.call_later(delay, self._reset_and_connect)
 
     def _reset_and_connect(self):
@@ -50,22 +52,27 @@ class MeshcoreConnection(TcpConnection):
 
     async def connect(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        print("in connection")
         try:
-            await asyncio.get_event_loop().sock_connect(self.socket, (self.host, self.port))
-            await self.on_connected()
+            await get_running_loop().sock_connect(self.socket, (self.host, self.port))
+            # loop must go before on_connected because part of the connect is receiving
+            # a deviceInfo packet.
+            asyncio.create_task(self._read_loop())
+
+            # Call the on_connected handler (not await)
+            await self.on_connected()   # or self.emit("connected", {...})
+
             self._reconnect_in_progress = False
         except Exception as e:
             print("Connection Error", e)
+            traceback.print_exc()
             self.attempt_reconnect()
             return
-
-        asyncio.create_task(self._read_loop())
 
     async def _read_loop(self):
         try:
             while True:
-                data = await asyncio.get_event_loop().sock_recv(self.socket, 4096)
+                data = await get_running_loop().sock_recv(self.socket, 4096)
                 if not data:
                     break
                 self.on_socket_data_received(data)
@@ -73,7 +80,8 @@ class MeshcoreConnection(TcpConnection):
             print("Socket read error:", e)
             self.attempt_reconnect()
         finally:
-            self.socket.close()
+            if self.socket != None:
+                self.socket.close()
 
     def get_current_ip_address(self):
         return self.socket.getpeername()[0] if self.socket else None
@@ -105,6 +113,7 @@ class MeshcoreConnection(TcpConnection):
                 self.route_frame(frame_data)
             except Exception as e:
                 print("Failed to process frame", e)
+                traceback.print_exc()
                 break
 
     def route_frame(self, frame_data: bytes):
@@ -140,11 +149,11 @@ class MeshcoreConnection(TcpConnection):
 
     def decode_port_payload(self, port_num: int, payload: bytes):
         reader = BufferReader(payload[1:])  # skip portNum
-        if port_num == portNums.Contact:
+        if port_num == port_nums.Contact:
             return self.decode_contact(reader)
-        elif port_num == portNums.ContactSync:
+        elif port_num == port_nums.ContactSync:
             return self.decode_contact_sync(reader)
-        elif port_num == portNums.Telemetry:
+        elif port_num == port_nums.Telemetry:
             return self.decode_telemetry(reader)
         else:
             return {"raw": payload}
@@ -162,3 +171,32 @@ class MeshcoreConnection(TcpConnection):
 
     def decode_telemetry(self, reader: BufferReader):
         return {"telemetry": reader.read_remaining_bytes()}
+
+    # --- Shutdown ---
+    def shutdown(self):
+        """Gracefully close socket, stop reconnects, and shutdown request API."""
+        print("[MeshcoreConnection] Shutting down...")
+
+        # Cancel reconnect attempts
+        self._reconnect_in_progress = False
+
+        # Close socket if open
+        if self.socket:
+            try:
+                self.socket.close()
+                print("[MeshcoreConnection] Socket closed.")
+            except Exception as e:
+                print(f"[MeshcoreConnection] Error closing socket: {e}")
+            finally:
+                self.socket = None
+
+        # Shutdown request API (cascades into MeshcoreCommandQueue)
+        if self.request:
+            try:
+                self.request.shutdown()
+            except Exception as e:
+                print(f"[MeshcoreConnection] Error shutting down requests: {e}")
+            finally:
+                self.request = None
+
+        print("[MeshcoreConnection] Shutdown complete.")

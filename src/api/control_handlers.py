@@ -1,7 +1,7 @@
 # handlers/control_handlers.py
 from flask import jsonify
-from api_utils import safe
-from services_manager import restart_services   # assuming restart_services is ported separately
+from src.api.api_utils import safe
+from src.api.services_manager import restart_services   # assuming restart_services is ported separately
 
 @safe
 def restart_services_handler():

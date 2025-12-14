@@ -1,7 +1,7 @@
 import asyncio
-from events.event_emitter import EventEmitter
-from meshtastic.tcp_connection import TcpConnection
-from meshtastic.serial_connection import SerialConnection
+from meshcore_py import EventEmitter
+from ..meshtastic.tcp_connection import TcpConnection
+from ..meshtastic.serial_connection import SerialConnection
 
 
 class MeshtasticHandler(EventEmitter):
@@ -11,24 +11,14 @@ class MeshtasticHandler(EventEmitter):
         reconnect = opts.get("reconnect", {"enabled": True})
         get_config_on_connect = opts.get("getConfigOnConnect", False)
 
-        # Primary TCP connection
-        self.connection = TcpConnection({
-            "connId": conn_id,
-            "host": host,
-            "port": port,
-            "reconnectPolicy": reconnect.get("enabled", True),
-        })
+        # Single TCP connection
+        self.connection = TcpConnection(host, port, conn_id)
 
-        # Additional transports (optional)
-        self.tcp_conn = TcpConnection({"connId": conn_id, "host": host, "port": port})
-        self.serial_conn = SerialConnection({
-            "devicePath": "/dev/ttyUSB0",
-            "baudRate": 115200,
-            "connId": "serial-1",
-        })
+        # Serial connection
+        self.serial_conn = SerialConnection("/dev/ttyUSB0", 115200, "serial-1")
 
         # Subscribe to packet events
-        for conn in [self.tcp_conn, self.serial_conn]:
+        for conn in [self.connection, self.serial_conn]:
             conn.on("packet", self._handle_packet)
             conn.on("connect", lambda meta: print(f"[Bridge] Connected: {meta}"))
             conn.on("error", lambda meta, err: print(f"[Bridge] Error: {meta}, {err}"))
@@ -55,3 +45,37 @@ class MeshtasticHandler(EventEmitter):
 
     def off(self, event_name, callback):
         return super().off(event_name, callback)
+
+    # --- Shutdown ---
+    def shutdown(self):
+        """Gracefully shutdown TCP and Serial connections, then close handler."""
+        print("[MeshtasticHandler] Shutting down...")
+
+        # TCP connection
+        if self.connection:
+            try:
+                self.connection.shutdown()
+                print("[MeshtasticHandler] TCP connection shut down.")
+            except Exception as e:
+                print(f"[MeshtasticHandler] Error shutting down TCP connection: {e}")
+            finally:
+                self.connection = None
+
+        # Serial connection
+        if self.serial_conn:
+            try:
+                self.serial_conn.shutdown()
+                print("[MeshtasticHandler] Serial connection shut down.")
+            except Exception as e:
+                print(f"[MeshtasticHandler] Error shutting down serial connection: {e}")
+            finally:
+                self.serial_conn = None
+
+        # Close event emitter
+        try:
+            super().close()
+            print("[MeshtasticHandler] EventEmitter closed.")
+        except Exception as e:
+            print(f"[MeshtasticHandler] Error closing EventEmitter: {e}")
+
+        print("[MeshtasticHandler] Shutdown complete.")

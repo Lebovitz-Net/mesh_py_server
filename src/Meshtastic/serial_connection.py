@@ -48,3 +48,24 @@ class SerialConnection(Connection):
             return False
         port.write(buf)
         return True
+
+    # --- Shutdown ---
+    def shutdown(self):
+        """Gracefully shutdown all serial ports and cancel reconnects."""
+        print(f"[SerialConnection {self.conn_id}] Shutting down...")
+        self.is_shutting_down = True
+
+        for conn_id, entry in list(self.serial_connections.items()):
+            port = entry["port"]
+            try:
+                if entry["reconnectTimer"]:
+                    entry["reconnectTimer"].cancel()
+                    print(f"[SerialConnection {conn_id}] Reconnect timer cancelled.")
+                port.close()
+                print(f"[SerialConnection {conn_id}] Port closed.")
+            except Exception as e:
+                print(f"[SerialConnection {conn_id}] Error during shutdown: {e}")
+            finally:
+                self.serial_connections.pop(conn_id, None)
+
+        print(f"[SerialConnection {self.conn_id}] Shutdown complete.")

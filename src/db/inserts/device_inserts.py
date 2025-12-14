@@ -1,7 +1,6 @@
 # src/meshtastic/utils/device_inserts.py
 
-from src.meshtastic.utils.database import db
-
+from src.db.database import db
 
 def _insert_device(device: dict) -> None:
     if not device.get("device_id"):
@@ -128,9 +127,9 @@ def _lookup_device_ip_map(source_ip: str) -> dict | None:
 
 # Exported object of insert functions
 device_inserts = {
-    "insert_device": _insert_device,
-    "insert_device_setting": _insert_device_setting,
-    "insert_device_meta": _insert_device_meta,
-    "upsert_device_ip_map": _upsert_device_ip_map,
-    "lookup_device_ip_map": _lookup_device_ip_map,
+    "insertDevice": _insert_device,
+    "insertDeviceSetting": _insert_device_setting,
+    "insertDeviceMeta": _insert_device_meta,
+    "upsertDeviceIp_map": _upsert_device_ip_map,
+    "lookupDeviceIpMap": _lookup_device_ip_map,
 }

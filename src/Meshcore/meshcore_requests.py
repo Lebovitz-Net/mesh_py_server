@@ -1,6 +1,6 @@
 import asyncio
-from ..event_emitter import EventEmitter
-from .meshcore_command_queue import MeshcoreCommandQueue
+from external.meshcore_py.src.events import EventEmitter
+from src.meshcore.meshcore_command_queue import MeshcoreCommandQueue
 
 _meshcore_runtime = None
 
@@ -15,10 +15,10 @@ def get_mesh_runtime():
 class MeshcoreRequests(EventEmitter):
     instance = None
 
-    def __init__(self, handler, interval=10000):
+    def __init__(self, handler, timeout_ms=10000):
         super().__init__()
         self.connection = handler["connection"]
-        self.queue = MeshcoreCommandQueue(handler, interval)
+        self.queue = MeshcoreCommandQueue(handler, timeout_ms)
 
         if MeshcoreRequests.instance is None:
             MeshcoreRequests.instance = self
@@ -27,12 +27,14 @@ class MeshcoreRequests(EventEmitter):
     def get_instance():
         return MeshcoreRequests.instance
 
-    # --- High-level API calls ---
     async def get_self_info(self, timeout_ms=None):
-        return await self.queue.send(lambda: self.connection.get_self_info(timeout_ms))
+        def fn():
+            coro = self.connection.get_self_info(timeout_ms)
+            return coro
+        return await self.queue.send(fn)
 
     async def send_advert(self, type_):
-        return await self.queue.send(lambda: self.connection.send_advert(type_))
+        return await self.queue.send(lambda _: self.connection.send_advert(type_=0))
 
     async def send_flood_advert(self):
         return await self.queue.send(lambda: self.connection.send_flood_advert())
@@ -142,3 +144,24 @@ class MeshcoreRequests(EventEmitter):
     def close(self):
         self.connection.close()
         super().close()
+
+    def shutdown(self):
+        """Gracefully stop queue, close connection, and cleanup singleton."""
+        print("[MeshcoreRequests] Shutting down...")
+
+        if self.queue:
+            try:
+                self.queue.shutdown()   # delegate to MeshcoreCommandQueue
+            except Exception as e:
+                print(f"[MeshcoreRequests] Error shutting down queue: {e}")
+
+        try:
+            self.close()
+        except Exception as e:
+            print(f"[MeshcoreRequests] Error closing connection: {e}")
+
+        if MeshcoreRequests.instance is self:
+            MeshcoreRequests.instance = None
+
+        print("[MeshcoreRequests] Shutdown complete.")
+

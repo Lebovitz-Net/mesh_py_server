@@ -1,6 +1,5 @@
 # src/meshtastic/utils/contact_inserts.py
-
-from src.meshtastic.utils.database import db
+from src.db.database import db
 
 
 def _insert_users(user: dict) -> None:
@@ -33,5 +32,5 @@ def _insert_users(user: dict) -> None:
 
 # Exported object of insert functions
 contact_inserts = {
-    "insert_users": _insert_users,
+    "insertUsers": _insert_users,
 }

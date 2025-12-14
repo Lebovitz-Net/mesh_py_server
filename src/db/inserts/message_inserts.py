@@ -1,10 +1,9 @@
 # src/meshtastic/utils/message_inserts.py
 
 import time
-from src.meshtastic.utils.database import db
-from src.servers.sse_emitters import emit_message_update
+from src.db.database import db
+from src.server.sse_emitters import emit_message_update
 from src.utils import normalize_in
-
 
 def _insert_message(msg: dict) -> None:
     """
@@ -50,5 +49,5 @@ def _insert_message(msg: dict) -> None:
 
 # Exported object of insert functions
 message_inserts = {
-    "insert_message": _insert_message,
+    "insertMessage": _insert_message,
 }

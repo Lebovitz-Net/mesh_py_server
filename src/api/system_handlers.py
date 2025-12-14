@@ -1,7 +1,7 @@
 # handlers/system_handlers.py
 from flask import jsonify
-from api_utils import safe
-from config.config import config
+from src.api.api_utils import safe
+from src.config.config import config
 
 @safe
 def health():

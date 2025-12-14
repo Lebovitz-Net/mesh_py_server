@@ -1,19 +1,16 @@
-from db.insert_handlers import insertHandlers
-from events.overlay_emitter import emitOverlay
-from events.event_emitter import emitEvent
-from meshcore.utils.string_utils import decode_python_string
+# src/routing/dispatch_mqtt.py
+
+from src.db.insert_handlers import InsertHandlers
+from src.meshcore.utils.string_utils import decode_python_string
 
 
-def handle_mqtt(sub_packet: dict):
-    print("[dispatchMqtt] mqtt", sub_packet)
-    # Example extension:
-    # data, meta = sub_packet.get("data"), sub_packet.get("meta")
-    # decoded = decode_python_string(data.get("payload", ""))
-    # insertHandlers.insertMqttMessage({"payload": decoded, **meta})
-    # emitOverlay("mqtt", sub_packet)
-    # emitEvent("mqttReceived", sub_packet)
+class DispatchMqtt:
+    def handle_mqtt(self, sub_packet: dict):
+        print("[dispatchMqtt] mqtt", sub_packet)
 
-
-dispatchMqtt = {
-    "mqtt": handle_mqtt
-}
+        # Example extension:
+        # data, meta = sub_packet.get("data"), sub_packet.get("meta")
+        # decoded = decode_python_string(data.get("payload", ""))
+        # InsertHandlers.insertMqttMessage({"payload": decoded, **meta})
+        # self.emit("mqtt", sub_packet)        # if using EventEmitter
+        # self.overlay.emit("mqttReceived", sub_packet)  # if using OverlayEmitter

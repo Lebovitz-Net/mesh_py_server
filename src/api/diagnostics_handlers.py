@@ -1,8 +1,8 @@
 # handlers/diagnostics_handlers.py
 from flask import jsonify, request
-from api_utils import safe
+from src.api.api_utils import safe
 from src.db.query_handlers import query_handlers
-from src.db.insert_handlers import insert_handlers
+from src.db.insert_handlers import InsertHandlers
 
 @safe
 def get_logs_handler():
@@ -27,7 +27,7 @@ def get_packet_handler(id):
 
 @safe
 def inject_packet_handler():
-    result = insert_handlers["injectPacketLog"](request.json)
+    result = InsertHandlers["injectPacketLog"](request.json)
     return jsonify({"success": True, "result": result})
 
 handlers = {

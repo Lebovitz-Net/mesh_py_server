@@ -1,42 +1,49 @@
 # src/meshtastic/utils/meshcore_command_queue.py
+
 import asyncio
 import time
-from typing import Callable, Dict, Optional
+import inspect
+from typing import Callable, Dict, Optional, Any
+from asyncio import get_running_loop
+
 
 class MeshcoreCommandQueue:
     def __init__(self, handler, timeout_ms: int = 5000):
         self.timeout_ms = timeout_ms
-        self.queue = []
+        self.queue: list[Callable[[], Any]] = []
         self.waiting: Optional[Callable[[str], None]] = None
         self.is_processing = False
         self.loops: Dict[str, asyncio.Task] = {}
 
         # Bind handler events
-        handler.on("ok", lambda: self._resolve_waiting("ok"))
-        handler.on("err", lambda: self._resolve_waiting("err"))
+        on = handler["on"]
+        on("ok", lambda _: self._resolve_waiting("ok"))
+        on("err", lambda _: self._resolve_waiting("err"))
 
     def _resolve_waiting(self, status: str):
         if self.waiting:
             self.waiting(status)
 
-    async def send(self, command_fn: Callable[[], None]) -> str:
+    async def send(self, command_fn: Callable) -> str:
         """
         Enqueue a command function and wait for its result.
         Returns 'ok', 'err', 'timeout', or 'error'.
         """
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
+
         fut = loop.create_future()
 
-        def task():
+        async def task():
             start_time = time.time()
-            print(f"[MeshcoreQueue] Dispatching command at {time.strftime('%Y-%m-%d %H:%M:%S')}", command_fn)
 
-            timer = loop.call_later(self.timeout_ms / 1000, lambda: self._timeout(command_fn, fut, start_time))
+            timer = loop.call_later(
+                self.timeout_ms / 1000,
+                lambda: self._timeout(command_fn, fut, start_time)
+            )
 
             def waiting(status: str):
                 timer.cancel()
                 duration = int((time.time() - start_time) * 1000)
-                print(f"[MeshcoreQueue] Command result: {status} ({duration}ms)")
                 if not fut.done():
                     fut.set_result(status)
                 self.waiting = None
@@ -45,10 +52,17 @@ class MeshcoreCommandQueue:
             self.waiting = waiting
 
             try:
-                command_fn()
+                result = command_fn()
+                if inspect.isawaitable(result):
+                    await result
+                else:
+                    print("[MeshcoreQueue] Result not awaitable; treating as sync.")
+                # Fallback: if no event resolved yet, mark ok
+                if self.waiting:
+                    self.waiting("ok")
             except Exception as err:
                 timer.cancel()
-                print(f"[MeshcoreQueue] Command dispatch error: {err}")
+                print(f"[MeshcoreQueue] Command dispatch error: {err!r}")
                 if self.waiting:
                     self.waiting("error")
 
@@ -59,50 +73,37 @@ class MeshcoreCommandQueue:
 
         return await fut
 
-    def _timeout(self, command_fn, fut, start_time):
+    def _timeout(self, ref, fut, start_time):
         if self.waiting:
-            print(f"[MeshcoreQueue] Command timed out after {self.timeout_ms}ms", command_fn)
             self.waiting("timeout")
 
     def process_next(self):
         if self.queue:
             self.is_processing = True
             next_task = self.queue.pop(0)
-            next_task()
+            asyncio.create_task(next_task())
         else:
             self.is_processing = False
 
     def flush(self):
-        print("[MeshcoreQueue] Flushing queue — cancelling all pending commands")
         self.queue.clear()
         self.waiting = None
         self.is_processing = False
 
     def is_idle(self) -> bool:
-        return len(self.queue) == 0 and self.waiting is None
+        idle = len(self.queue) == 0 and self.waiting is None
+        return idle
 
     def start_loop(self, label: str, command_fn: Callable[[], asyncio.Future], interval_ms: int = 3600000):
         if label in self.loops:
-            print(f"[MeshcoreQueue] Loop '{label}' already running")
             return self.loops[label]
 
         async def loop_fn():
             while True:
                 try:
                     result = await command_fn()
-                    print("start loop command", command_fn)
-                    if result == "ok":
-                        print(f"[MeshcoreQueue] Loop '{label}' command succeeded")
-                    elif result == "failed":
-                        print(f"[MeshcoreQueue] Loop '{label}' command returned 'failed'")
-                    elif result == "timeout":
-                        print(f"[MeshcoreQueue] Loop '{label}' command timed out")
-                    elif result == "error":
-                        print(f"[MeshcoreQueue] Loop '{label}' command threw an error")
-                    else:
-                        print(f"[MeshcoreQueue] Loop '{label}' returned unknown status: {result}")
                 except Exception as err:
-                    print(f"[MeshcoreQueue] Loop '{label}' error: {err}")
+                    print(f"[MeshcoreQueue] Loop '{label}' error: {err!r}")
                 await asyncio.sleep(interval_ms / 1000)
 
         task = asyncio.create_task(loop_fn())
@@ -114,13 +115,12 @@ class MeshcoreCommandQueue:
         if task:
             task.cancel()
             del self.loops[label]
-            print(f"[MeshcoreQueue] Loop '{label}' stopped")
 
     async def await_connected(self, emitter, timeout_ms: int = 5000):
         """
         Wait until emitter fires 'connected' or timeout.
         """
-        loop = asyncio.get_event_loop()
+        loop = get_running_loop()
         fut = loop.create_future()
 
         def on_connected(info):
@@ -128,6 +128,7 @@ class MeshcoreCommandQueue:
                 fut.set_result(info)
 
         def on_error(err):
+            print(f"[MeshcoreQueue] await_connected got 'error' err={err!r}")
             if not fut.done():
                 fut.set_exception(err)
 
@@ -140,3 +141,23 @@ class MeshcoreCommandQueue:
             raise TimeoutError(f"connected timeout after {timeout_ms}ms")
         finally:
             emitter.off("connected", on_connected)
+
+    # --- Shutdown ---
+    def shutdown(self):
+        """Gracefully stop all loops, flush queue, and reset state."""
+        print("[MeshcoreCommandQueue] Shutting down...")
+
+        # Cancel all active loops
+        for label, task in list(self.loops.items()):
+            try:
+                task.cancel()
+                print(f"[MeshcoreCommandQueue] Loop '{label}' cancelled.")
+            except Exception as e:
+                print(f"[MeshcoreCommandQueue] Error cancelling loop '{label}': {e}")
+            finally:
+                del self.loops[label]
+
+        # Clear any queued commands
+        self.flush()
+
+        print("[MeshcoreCommandQueue] Shutdown complete.")

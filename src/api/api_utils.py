@@ -2,6 +2,7 @@
 import hashlib, re, time
 from functools import wraps
 from flask import jsonify
+import re
 
 def safe(fn):
     @wraps(fn)
@@ -23,9 +24,17 @@ def generate_message_id(packet: dict) -> str:
     ])
     return hashlib.sha256(base.encode()).hexdigest()[:16]
 
-def extract_sender_and_mentions(msg: str) -> dict:
+def extract_sender_and_mentions(msg: str) -> tuple[str, list[str]]:
+    """
+    Parse a message of the form 'sender: message @[user] ...'
+    Returns (sender, mentions) where:
+      - sender is lowercased and stripped
+      - mentions is a list of unique lowercase usernames
+    """
     if ":" not in msg:
-        return {"sender": None, "message": msg, "mentions": None}
+        return None, []
+
     sender, message = msg.split(":", 1)
     mentions = list(set(m.lower() for m in re.findall(r"@(\w+)", message)))
-    return {"sender": sender.strip().lower(), "message": message.strip(), "mentions": mentions}
+    return sender.strip().lower(), mentions
+

@@ -1,47 +1,31 @@
+# src/startup/meshtastic_startup.py
+
 import os
 import asyncio
-
-from handlers.meshtastic_handler import create_mesh_handler
-from meshtastic.tcp_connection import TcpConnection
-# from core.mesh_gateway import register_mesh_runtime, subscribe_to_packets
-from meshtastic.meshtastic_ingestion_handler import ingest as meshtastic_ingest
-from meshtastic.packets.packet_builder import build_to_radio_frame
-from meshtastic.utils.node_mapping import wait_for_mapping
+from src.handlers.meshtastic_handler import MeshtasticHandler
+from src.meshtastic.protobufs.proto_utils import build_to_radio_frame, init_proto_types
+from src.meshtastic.utils.node_mapping import wait_for_mapping
 
 async def start_meshtastic():
-    # --- Config ---
-    host = os.getenv("NODE_IP_HOST", "192.168.1.52")
-    port = int(os.getenv("NODE_IP_PORT", "4403"))
+    init_proto_types()
+    host = os.getenv("NODE_IP", "192.168.2.79")
+    port = int(os.getenv("NODE_PORT", "4403"))
+    mesh = MeshtasticHandler("mesh-1", host, port)
 
-    # --- Handler ---
-    mesh = await create_mesh_handler(
-        "mesh-1",
-        host,
-        port,
-        {
-            "reconnect": {"enabled": True},
-            "getConfigOnConnect": False,  # we’ll handle init explicitly
-        },
-    )
-
-    # Bind request helpers
-    TcpConnection.bind_mesh_requests(mesh)
-
-    # Register runtime with gateway
-    # register_mesh_runtime("mesh-1", "meshtastic", mesh)
-
-    # Subscribe to packets for ingestion
-    subscribe_to_packets("mesh-1", lambda meta, buffer: meshtastic_ingest(meta, buffer))
-
-    # --- Startup sequence ---
-    try:
-        # Send wantConfigId
-        mesh.send(build_to_radio_frame("wantConfigId", 0))
-
-        # Wait for mapping to be populated for this host
-        mapping = await wait_for_mapping(host, timeout=5000)
-        print(f"[mesh-1] Startup sequence complete, mapping ready: {mapping}")
-    except Exception as err:
-        print("[mesh-1] Startup sequence failed:", err)
+    # Startup sequence...
+    mesh.send(build_to_radio_frame("want_config_id"))
+    mapping = await wait_for_mapping(host, timeout=5000)
+    print(f"[mesh-1] Startup complete, mapping ready: {mapping}")
 
     return mesh
+
+def shutdown_meshtastic(mesh: MeshtasticHandler):
+    """Gracefully shutdown Meshtastic handler (TCP + Serial)."""
+    print("[MeshtasticStartup] Shutting down Meshtastic...")
+    try:
+        if mesh:
+            mesh.shutdown()
+            print("[MeshtasticStartup] Handler shut down.")
+    except Exception as e:
+        print(f"[MeshtasticStartup] Error during shutdown: {e}")
+    print("[MeshtasticStartup] Shutdown complete.")

@@ -12,6 +12,7 @@ dist
 dist-ssr
 deprecated
 external
+external/*
 keys
 
 # Editor directories and files
@@ -25,3 +26,4 @@ keys
 !.vscode/extensions.json
 .idea
 .DS_Store
+__pycache__

@@ -1,7 +1,8 @@
 # src/meshtastic/tcp_socket.py
 import asyncio
 import socket
-from .packets.frame_parser import extract_frames
+from src.meshtastic.protobufs.proto_utils import extract_frames
+from asyncio import get_running_loop
 
 class TcpSocket:
     def __init__(self, conn_id, host, port):
@@ -11,7 +12,7 @@ class TcpSocket:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.buffer = b""
         self.connected = False
-        self.connected_promise = asyncio.get_event_loop().create_future()
+        self.connected_promise = get_running_loop().create_future()
         self._setup()
 
     def _setup(self):
@@ -49,3 +50,19 @@ class TcpSocket:
         self.socket.close()
         self.connected = False
         print(f"[TcpSocket {self.conn_id}] Connection terminated")
+
+    # --- Shutdown ---
+    def shutdown(self):
+        """Gracefully shutdown the TCP socket and reset state."""
+        print(f"[TcpSocket {self.conn_id}] Shutting down...")
+        try:
+            if self.socket:
+                self.socket.close()
+                print(f"[TcpSocket {self.conn_id}] Socket closed.")
+        except Exception as e:
+            print(f"[TcpSocket {self.conn_id}] Error closing socket: {e}")
+        finally:
+            self.socket = None
+            self.connected = False
+            self.buffer = b""
+        print(f"[TcpSocket {self.conn_id}] Shutdown complete.")

@@ -1,8 +1,8 @@
 # src/meshtastic/utils/channel_inserts.py
 
 import time
-from src.meshtastic.utils.database import db
-from src.servers.sse_emitters import emit_channel_update
+from src.db.database import db
+from src.server.sse_emitters import emit_channel_update
 
 
 def _insert_channel(packet: dict) -> None:
@@ -53,5 +53,5 @@ def _insert_channel(packet: dict) -> None:
 
 # Exported object of insert functions
 channel_inserts = {
-    "insert_channel": _insert_channel,
+    "insertChannel": _insert_channel,
 }

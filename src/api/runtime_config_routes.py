@@ -1,7 +1,7 @@
 # src/api/config_routes.py
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from config import get_node_ip, set_node_ip
+from src.config.config import get_node_ip, set_node_ip
 
 router = APIRouter()
 

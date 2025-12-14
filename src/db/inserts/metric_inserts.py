@@ -1,8 +1,7 @@
 # src/meshtastic/utils/metric_inserts.py
 
 import time
-from src.meshtastic.utils.database import db
-
+from src.db.database import db
 
 def _insert_telemetry(tel: dict) -> None:
     sql = """
@@ -223,15 +222,15 @@ def _insert_metrics_handler(telemetry: dict) -> None:
 
 # Exported object of insert functions
 metric_inserts = {
-    "insert_telemetry": _insert_telemetry,
-    "insert_event_emission": _insert_event_emission,
-    "insert_queue_status": _insert_queue_status,
-    "insert_device_metrics": _insert_device_metrics,
-    "insert_environment_metrics": _insert_environment_metrics,
-    "insert_air_quality_metrics": _insert_air_quality_metrics,
-    "insert_power_metrics": _insert_power_metrics,
-    "insert_local_stats": _insert_local_stats,
-    "insert_health_metrics": _insert_health_metrics,
-    "insert_host_metrics": _insert_host_metrics,
-    "insert_metrics_handler": _insert_metrics_handler,
+    "insertTelemetry": _insert_telemetry,
+    "insertEventEmission": _insert_event_emission,
+    "insertQueueStatus": _insert_queue_status,
+    "insertDeviceMetrics": _insert_device_metrics,
+    "insertEnvironmentMetrics": _insert_environment_metrics,
+    "insertAirQualityMetrics": _insert_air_quality_metrics,
+    "insertPowerMetrics": _insert_power_metrics,
+    "insertLocalStats": _insert_local_stats,
+    "insertHealthMetrics": _insert_health_metrics,
+    "insertHostMetrics": _insert_host_metrics,
+    "insertMetricsHandler": _insert_metrics_handler,
 }

@@ -1,5 +1,5 @@
 # src/events/emitters.py
-from sse import broadcast_event
+from src.server.sse import broadcast_event
 
 def emit_node_update(node: dict):
     """

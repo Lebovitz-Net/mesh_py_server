@@ -1,54 +1,30 @@
-# services_manager.py
+# src/api/services_manager.py
 import time
-from global_state import global_state
 from src.db.query_handlers import query_handlers
 
 def teardown_services():
+    """Tear down backend services (placeholder)."""
     print("⚠️  Tearing down services...")
-
-    if global_state.mesh:
-        print("Closing Mesh TCP connection...")
-        global_state.mesh.end()
-
-    if global_state.mqtt_handler:
-        print("Disconnecting MQTT...")
-        global_state.mqtt_handler.disconnect()
-
-    if global_state.tcp_server:
-        print("Closing TCP server...")
-        global_state.tcp_server.close()
-
-    if global_state.ws_server:
-        print("Closing WebSocket server...")
-        global_state.ws_server.close()
-
-    if global_state.api_server:
-        print("Closing API server...")
-        global_state.api_server.close()
-
+    # Add explicit shutdown calls here if needed, e.g. meshcore.shutdown(), mqtt.shutdown(), etc.
     print("✅ Teardown complete.")
 
 def init_services(config):
+    """Initialize backend services (placeholder)."""
     print("🚀 Initializing backend services...")
-
-    # Replace with your actual service initializers
-    global_state.tcp_server = start_tcp_server(config)
-    global_state.ws_server = start_ws_server(config)
-    global_state.mqtt_handler = connect_mqtt(config)
-    global_state.mesh = open_mesh_socket(config)
-    start_ingestion_loop(config)
-
+    # Add explicit startup calls here if needed, e.g. start_tcp_server(config), start_ws_server(config), etc.
     print("✅ All services initialized.")
 
 def shutdown(signal="manual"):
+    """Gracefully shut down services when a signal is received."""
     print(f"\n⚠️  Received {signal}, shutting down gracefully...")
     teardown_services()
 
 def restart_services():
+    """Restart backend services by tearing down and reinitializing with fresh config."""
     print("🔄 Restarting backend services...")
     teardown_services()
     time.sleep(1)
     config = query_handlers["getFullConfig"]()
     init_services(config)
     print("✅ Restart complete.")
-    return {"restarted": True, "timestamp": int(time.time()*1000)}
+    return {"restarted": True, "timestamp": int(time.time() * 1000)}

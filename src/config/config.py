@@ -1,4 +1,5 @@
-# src/meshtastic/utils/config.py
+# src/config/config.py
+
 import os
 from dotenv import load_dotenv
 
@@ -56,7 +57,9 @@ config = {
     },
     "mqtt": {
         "brokerUrl": os.getenv("MQTT_BROKER_URL", ""),
-        "subTopic": "mesh/ingest",
+        "brokerHost": "broker.hivemq.com",
+        "brokerPort": 1883,
+        "subTopic": "meshcore/*/uplink",
         "pubOptions": {"qos": 1},
     },
     "tcp": {

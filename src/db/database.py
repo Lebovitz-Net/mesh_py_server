@@ -4,27 +4,27 @@ import os
 import sqlite3
 from pathlib import Path
 
-from src.db.db_nodes import db_nodes
-from src.db.db_metrics import db_metrics
-from src.db.db_messages import db_messages
-from src.db.db_maps import db_maps
-from src.db.db_diagnostics import db_diagnostics
-from src.db.db_connections import db_connections
-from src.db.db_configs import db_configs
-from src.db.db_contacts import db_contacts
-from src.db.db_channels import db_channels
+from src.db.db_nodes import dbNodes
+from src.db.db_metrics import dbMetrics
+from src.db.db_messages import dbMessages
+from src.db.db_maps import dbMaps
+from src.db.db_diagnostics import dbDiagnostics
+from src.db.db_connections import dbConnections
+from src.db.db_configs import dbConfigs
+from src.db.db_contacts import dbContacts
+from src.db.db_channels import dbChannels
 
 # --- Combined schema tables ---
 tables = (
-    db_contacts
-    + db_channels
-    + db_configs
-    + db_connections
-    + db_diagnostics
-    + db_maps
-    + db_messages
-    + db_metrics
-    + db_nodes
+    dbContacts
+    + dbChannels
+    + dbConfigs
+    + dbConnections
+    + dbDiagnostics
+    + dbMaps
+    + dbMessages
+    + dbMetrics
+    + dbNodes
 )
 
 # --- DB path ---

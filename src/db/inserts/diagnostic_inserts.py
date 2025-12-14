@@ -2,8 +2,7 @@
 
 import json
 import time
-from src.meshtastic.utils.database import db, db_boolean
-
+from src.db.database import db, db_boolean
 
 def _insert_log_record(data: dict) -> None:
     message = data.get("message")
@@ -132,11 +131,11 @@ def _insert_config_mutation(mutation: dict) -> None:
 
 # Exported object of insert functions
 diagnostic_inserts = {
-    "insert_log_record": _insert_log_record,
-    "insert_packet_log": _insert_packet_log,
-    "inject_packet_log": _inject_packet_log,
-    "insert_trace_data": _insert_trace_data,
-    "insert_diagnostic_overlay": _insert_diagnostic_overlay,
-    "insert_overlay_preview": _insert_overlay_preview,
-    "insert_config_mutation": _insert_config_mutation,
+    "insertLogRecord": _insert_log_record,
+    "insertPacketLog": _insert_packet_log,
+    "injectPacketLog": _inject_packet_log,
+    "insertTraceData": _insert_trace_data,
+    "insertDiagnosticOverlay": _insert_diagnostic_overlay,
+    "insertOverlayPreview": _insert_overlay_preview,
+    "insertConfigMutation": _insert_config_mutation,
 }

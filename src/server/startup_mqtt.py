@@ -1,50 +1,65 @@
-# src/mqtt_startup.py
-import time
-import paho.mqtt.client as mqtt
-from config import config
+# startup_mqtt.py
+import asyncio
+import logging
+import socket
 
-def start_mqtt_server():
+from src.config.config import config   # ✅ direct import
+from src.handlers.mqtt_handler import MqttHandler   # import the handler we built
+
+class MQTTStartupError(Exception):
+    """Raised when MQTT client fails to start/connect gracefully."""
+
+
+async def start_mqtt_server(connect_timeout: float = 10.0) -> MqttHandler:
     """
-    Start the MQTT bridge client.
-    Connects to broker, subscribes to ingest topic, returns the client.
+    Async start of MQTT bridge client using MqttHandler.
+    Validates broker host/port, instantiates handler, connects.
     """
 
-    # Generate unique client ID
-    client_id = f"mqtt-bridge-{int(time.time() * 1000)}"
+    broker_host = str(config["mqtt"].get("brokerHost", "")).strip()
+    broker_port = config["mqtt"].get("brokerPort", 1883)
+    broker_url  = config["mqtt"].get("brokerUrl", f"{broker_host}:{broker_port}")
+    node_id     = config["mqtt"].get("nodeId", "meshcore-node")
 
-    # Create client with MQTT v3.1.1
-    client = mqtt.Client(
-        client_id=client_id,
-        protocol=mqtt.MQTTv311,
-        clean_session=True
-    )
+    if not broker_host or not isinstance(broker_port, int):
+        msg = f"[MQTT] Invalid configuration: host={broker_host!r} port={broker_port!r}"
+        logging.error(msg)
+        raise MQTTStartupError(msg)
 
-    # Configure keepalive
-    client.keepalive = 60
+    # DNS pre-check
+    try:
+        socket.getaddrinfo(broker_host, broker_port)
+    except socket.gaierror as e:
+        msg = f"[MQTT] DNS resolution failed for host '{broker_host}': {e}"
+        logging.error(msg)
+        raise MQTTStartupError(msg)
 
-    # Optional: set callbacks
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
-            print(f"[MQTT] Connected to broker {config['mqtt']['brokerUrl']} as {client_id}")
-            # Subscribe once connected
-            client.subscribe(config["mqtt"]["subTopic"], qos=1)
-        else:
-            print(f"[MQTT] Connection failed with code {rc}")
+    logging.info(f"[MQTT] Connecting to {broker_url} as node {node_id}")
 
-    def on_message(client, userdata, msg):
-        print(f"[MQTT] Received on {msg.topic}: {msg.payload.decode(errors='replace')}")
+    handler = MqttHandler(broker=broker_host, options=config.get("mqttOptions", {}))
 
-    client.on_connect = on_connect
-    client.on_message = on_message
+    try:
+        # run connect in a thread to avoid blocking asyncio loop
+        await asyncio.to_thread(handler.connect, node_id)
+    except Exception as e:
+        msg = f"[MQTT] Connection failed: {e}"
+        logging.error(msg)
+        raise MQTTStartupError(msg)
 
-    # Connect to broker
-    broker_url = config["mqtt"]["brokerUrl"]
-    if broker_url:
-        client.connect(broker_url)
-    else:
-        print("[MQTT] No broker URL configured")
+    logging.info("[MQTT] Handler started successfully")
+    return handler
 
-    # Start network loop in background thread
-    client.loop_start()
 
-    return client
+async def shutdown_mqtt_server(handler: MqttHandler) -> None:
+    """Async, graceful shutdown of the MQTT handler."""
+    logging.info("[MQTT] Shutting down...")
+    if not handler:
+        logging.info("[MQTT] No handler to shut down.")
+        return
+    try:
+        await asyncio.to_thread(handler.shutdown)
+        logging.info("[MQTT] Handler disconnected.")
+    except Exception as e:
+        logging.error(f"[MQTT] Error during shutdown: {e}")
+    finally:
+        logging.info("[MQTT] Shutdown complete.")

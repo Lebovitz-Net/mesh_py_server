@@ -1,96 +1,98 @@
-import datetime
+# src/meshtastic/utils/packet_utils.py
+import binascii
+import time
+from typing import Any, Dict, List, Optional, Union
+from src.meshtastic.protobufs.proto_utils import get_protobufs
 
 DEFAULT_SKIP_KEYS = ["payload", "data", "message"]
 
-
-def normalize_buffers(obj, path=None, skip_keys=DEFAULT_SKIP_KEYS, encoding="hex"):
+def normalize_buffers(
+    obj: Any,
+    path: Optional[List[Union[str, int]]] = None,
+    skip_keys: Optional[List[str]] = None,
+    encoding: str = "hex"
+) -> Any:
     """
-    Recursively normalize buffers into hex strings, except for keys we want to preserve raw.
+    Recursively convert buffers to strings except for keys that should stay raw.
+    - Preserves raw buffers under keys in skip_keys (e.g., payload/data/message).
+    - Encodes other buffers to hex by default.
     """
-    if path is None:
-        path = []
+    path = path or []
+    skip_keys = skip_keys or DEFAULT_SKIP_KEYS
 
-    # Handle bytes (Buffer equivalent)
-    if isinstance(obj, (bytes, bytearray)):
+    if isinstance(obj, (bytes, bytearray, memoryview)):
         last_key = path[-1] if path else None
         if last_key in skip_keys:
-            return obj  # preserve raw buffer for decoding
-        return obj.hex() if encoding == "hex" else obj.decode(encoding, errors="ignore")
+            return bytes(obj)
+        if encoding == "hex":
+            return binascii.hexlify(bytes(obj)).decode()
+        elif encoding == "utf-8":
+            try:
+                return bytes(obj).decode("utf-8")
+            except Exception:
+                return binascii.hexlify(bytes(obj)).decode()
+        return binascii.hexlify(bytes(obj)).decode()
 
-    # Handle lists
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         return [normalize_buffers(item, path + [i], skip_keys, encoding) for i, item in enumerate(obj)]
 
-    # Handle dicts
     if isinstance(obj, dict):
-        return {key: normalize_buffers(val, path + [key], skip_keys, encoding) for key, val in obj.items()}
+        return {k: normalize_buffers(v, path + [k], skip_keys, encoding) for k, v in obj.items()}
 
     return obj
 
 
-def parse_plain_message(buffer: bytes) -> str | None:
-    """Decode a plain UTF-8 message payload."""
+def parse_plain_message(buffer: Union[bytes, bytearray, memoryview]) -> Optional[str]:
+    """Attempt to decode a text buffer as UTF-8, falling back gracefully."""
     try:
-        return buffer.decode("utf-8").strip()
+        return bytes(buffer).decode("utf-8")
     except Exception as err:
         print("[parsePlainMessage] Failed to parse buffer:", err)
         return None
 
 
-def get_channel(packet: dict) -> dict:
-    """Always return a top-level channel field, defaulting to 0 if missing."""
-    channel = 0
-    if isinstance(packet.get("channel"), int):
-        channel = packet["channel"]
-    return {"channel": channel}
+def get_channel(packet: Dict[str, Any]) -> Dict[str, int]:
+    """Always returns a top-level 'channel' field (default 0)."""
+    channel = packet.get("channel")
+    return {"channel": channel if isinstance(channel, int) else 0}
 
 
-def get_base_meta(packet: dict) -> dict:
-    """Construct canonical metadata for a packet."""
+def get_base_meta(packet: Dict[str, Any]) -> Dict[str, Any]:
+    """Canonical meta derived from MeshPacket-like structures."""
+    rx_time = packet.get("rxTime")
+    timestamp = int(rx_time * 1000) if isinstance(rx_time, (int, float)) else int(time.time() * 1000)
     return {
         "packetId": packet.get("id"),
         "fromNodeNum": packet.get("from"),
         "toNodeNum": packet.get("to"),
-        "timestamp": (packet.get("rxTime") * 1000) if packet.get("rxTime") else int(datetime.datetime.now().timestamp() * 1000),
+        "timestamp": timestamp,
         "viaMqtt": packet.get("viaMqtt"),
-        "hopStart": packet.get("hopStart"),
+        "hopStart": packet.get("hopStart") or packet.get("hoptstart"),
         **get_channel(packet),
     }
 
 
-def extract_oneof_subtypes(entry: dict, source_type: str, proto_json: dict) -> list[str]:
+def extract_oneof_subtypes(entry: Dict[str, Any], type_name: str) -> List[str]:
     """
-    Extract valid oneof subtypes from a decoded packet entry.
-    Uses the sourceType to determine which proto message to inspect.
+    Extract valid oneof subtypes from a decoded protobuf entry.
+    Uses compiled descriptors instead of proto.json.
     """
-    type_map = {
-        "fromRadio": "meshtastic.FromRadio",
-        "meshPacket": "meshtastic.MeshPacket",
-    }
-
-    message_type = type_map.get(source_type)
-    if not message_type or message_type not in proto_json:
-        print(f"Unknown sourceType or missing proto definition: {source_type}")
+    cls = get_protobufs(type_name)
+    if not cls:
         return []
 
-    oneof_fields = proto_json[message_type].get("oneof", [])
-    present_keys = []
-
-    for oneof_group in oneof_fields:
-        for field_name in oneof_group.get("oneof", []):
-            if entry.get(field_name) is not None:
-                present_keys.append(field_name)
-
+    present_keys: List[str] = []
+    for oneof in cls.DESCRIPTOR.oneofs:
+        for field in oneof.fields:
+            if entry.get(field.name) is not None:
+                present_keys.append(field.name)
     return present_keys
 
 
-def construct_sub_packet(entry: dict, subtype: str) -> dict | None:
-    """
-    Construct a normalized subpacket object for routing.
-    Combines canonical metadata with the embedded subtype payload.
-    """
-    if not entry or subtype not in entry:
-        print(f"Missing subtype payload: {subtype}")
+def construct_subpacket(entry: Dict[str, Any], subtype: str) -> Optional[Dict[str, Any]]:
+    """Constructs a normalized subpacket object for routing."""
+    if not entry or entry.get(subtype) is None:
+        print(f"[construct_subpacket] Missing subtype payload: {subtype}")
         return None
 
     return {
@@ -111,32 +113,49 @@ def construct_sub_packet(entry: dict, subtype: str) -> dict | None:
         "rxSessionId": entry.get("rxSessionId"),
         "decodedBy": entry.get("decodedBy"),
         "tags": entry.get("tags"),
-        "data": entry[subtype],
+        "data": entry.get(subtype),
     }
 
 
-def normalize_decoded_packet(decoded: dict | list[dict], proto_json: dict) -> list[dict]:
+def extract_canonical_fields(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Pulls a canonical subset of commonly used fields from any decoded packet entry."""
+    rx_time = entry.get("rxTime")
+    timestamp = int(rx_time * 1000) if isinstance(rx_time, (int, float)) else int(time.time() * 1000)
+    return {
+        "fromNodeNum": entry.get("from") or entry.get("fromNodeNum"),
+        "toNodeNum": entry.get("to") or entry.get("toNodeNum"),
+        "rxTime": timestamp,
+        "connId": entry.get("connId"),
+        "transportType": entry.get("transportType"),
+        "raw": entry.get("raw"),
+        "channelNum": entry.get("channel") if isinstance(entry.get("channel"), int) else entry.get("channelNum"),
+        "hopLimit": entry.get("hopLimit"),
+        "portNum": entry.get("portnum") or entry.get("portNum"),
+        "rxSnr": entry.get("rxSnr"),
+        "rxRssi": entry.get("rxRssi"),
+        "rxDeviceId": entry.get("rxDeviceId"),
+        "rxGatewayId": entry.get("rxGatewayId"),
+        "rxSessionId": entry.get("rxSessionId"),
+        "decodedBy": entry.get("decodedBy"),
+        "tags": entry.get("tags"),
+    }
+
+
+def normalize_decoded_packet(decoded: Union[Dict[str, Any], List[Dict[str, Any]]], type_name: str) -> List[Dict[str, Any]]:
     """
-    Normalize decoded packet(s) into enriched subpacket objects.
+    Normalizes decoded packet(s) into enriched subpacket objects.
     Handles single or array input, extracts canonical fields,
     identifies oneof subtypes, and constructs dispatchable objects.
     """
     entries = decoded if isinstance(decoded, list) else [decoded]
-    print("[.../normalize] entries", entries)
-    sub_packets = []
+    sub_packets: List[Dict[str, Any]] = []
 
     for entry in entries:
-        source_type = entry.get("sourceType")
-        if not source_type:
-            print("Missing sourceType in decoded entry")
-            continue
-
-        # canonicalFields would be another helper; stubbed here
-        canonical_fields = {k: v for k, v in entry.items() if k not in ("data", "payload")}
-        subtypes = extract_oneof_subtypes(entry, source_type, proto_json)
+        canonical_fields = extract_canonical_fields(entry)
+        subtypes = extract_oneof_subtypes(entry, type_name)
 
         for subtype in subtypes:
-            sub_packet = construct_sub_packet({**entry, **canonical_fields}, subtype)
+            sub_packet = construct_subpacket({**entry, **canonical_fields}, subtype)
             if sub_packet:
                 sub_packets.append(sub_packet)
 

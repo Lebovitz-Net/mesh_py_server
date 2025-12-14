@@ -1,9 +1,7 @@
 from src.meshtastic.utils.portnum_utils import get_port_name
 from src.meshtastic.utils.decompress import decompress
 from src.meshtastic.utils.packet_utils import parse_plain_message, get_base_meta, get_channel
-from src.meshtastic.utils.packet_decode import try_decode_buf
-from routing.dispatch_packet import dispatch_packet
-
+from src.meshtastic.protobufs.proto_decode import try_decode_buf
 
 def process_mesh_packet(packet: dict):
     data = packet.get("data", {})
@@ -27,7 +25,7 @@ def process_mesh_packet(packet: dict):
     if port_name == "TEXT_MESSAGE_APP":
         message = parse_plain_message(payload)
         if message:
-            dispatch_packet({
+            return ({
                 "type": "message",
                 "packet": packet,
                 "meta": {**get_base_meta(data)},
@@ -40,7 +38,7 @@ def process_mesh_packet(packet: dict):
                 return None
             message = parse_plain_message(decompressed)
             if message:
-                dispatch_packet({
+                return ({
                     "type": "message",
                     "data": {"packet": packet, **extract_options(packet)},
                     "meta": {**get_base_meta(data)},
@@ -52,7 +50,7 @@ def process_mesh_packet(packet: dict):
     elif port_name == "POSITION_APP":
         position = try_decode_buf(payload, "Position")
         if position:
-            dispatch_packet({
+            return ({
                 "type": "position",
                 "data": {
                     "latitude": position["latitudeI"] / 1e7,
@@ -70,7 +68,7 @@ def process_mesh_packet(packet: dict):
     elif port_name == "NODEINFO_APP":
         user = try_decode_buf(payload, "User")
         if user:
-            dispatch_packet({
+            return ({
                 "type": "nodeInfo",
                 "data": {
                     "id": user.get("id"),
@@ -84,14 +82,14 @@ def process_mesh_packet(packet: dict):
             print("[dispatchMeshPacket] Failed to decode NodeInfo")
 
     elif port_name == "ROUTING_APP":
-        dispatch_packet({
+        return ({
             "type": "routingMessage",
             "data": {"ignored": True},
             "meta": get_base_meta(data),
         })
 
     elif port_name == "ADMIN_APP":
-        dispatch_packet({
+        return ({
             "type": "adminMessage",
             "data": {"ignored": True},
             "meta": get_base_meta(data),
@@ -100,7 +98,7 @@ def process_mesh_packet(packet: dict):
     elif port_name == "TELEMETRY_APP":
         telemetry = try_decode_buf(payload, "Telemetry")
         if telemetry:
-            dispatch_packet({
+            return ({
                 "type": "telemetry",
                 "data": {
                     "voltage": telemetry.get("voltage"),
@@ -116,3 +114,4 @@ def process_mesh_packet(packet: dict):
         print(
             f"[dispatchMeshPacket] Unknown port {portnum} on channel {get_channel(packet)}, skipping"
         )
+    return None

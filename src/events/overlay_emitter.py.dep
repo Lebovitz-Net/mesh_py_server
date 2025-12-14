@@ -23,8 +23,8 @@ class OverlayEmitter:
         def unsubscribe():
             self._listeners.discard(fn)
         return unsubscribe
-
-    def emit_overlay(self, event_type: str, payload: Any):
+    
+    def emit(self, event_type: str, payload: Any):
         """
         Emit an overlay event to all subscribers.
         event_type: e.g. 'message', 'position', 'telemetry'
@@ -51,5 +51,11 @@ class OverlayEmitter:
         self.subscribe_overlay(logger)
 
 
-# ✅ create a global instance if you want singleton behavior
-overlay_emitter = OverlayEmitter()
+_overlay_emitter = OverlayEmitter()
+
+def emitOverlay(event: dict):
+    """
+    Module-level function that proxies to the singleton's class method.
+    This matches the JS pattern and keeps existing imports working.
+    """
+    return _overlay_emitter.emit_overlay(event)

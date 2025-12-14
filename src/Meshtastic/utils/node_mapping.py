@@ -3,6 +3,7 @@
 import asyncio
 from typing import Dict, List, Optional, Union
 from asyncio import Future
+from asyncio import get_running_loop
 
 _ip_to_device_map: Dict[str, Dict[str, Union[int, str]]] = {}
 _channel_to_num: Dict[int, int] = {}
@@ -39,7 +40,7 @@ async def wait_for_mapping(source_ip: str, timeout: int = 5000) -> Dict[str, Uni
     if existing:
         return existing
 
-    fut: Future = asyncio.get_event_loop().create_future()
+    fut: Future = get_running_loop().create_future()
     _mapping_waiters.setdefault(source_ip, []).append(fut)
 
     try:

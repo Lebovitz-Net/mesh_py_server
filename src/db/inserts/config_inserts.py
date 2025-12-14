@@ -1,6 +1,6 @@
 # src/meshtastic/utils/config_inserts.py
 
-from src.meshtastic.utils.database import db
+from src.db.database import db
 
 
 def _insert_config(sub_packet: dict) -> None:
@@ -146,9 +146,9 @@ def _insert_metadata(sub_packet: dict) -> None:
 
 # Exported object of insert functions
 config_inserts = {
-    "insert_config": _insert_config,
-    "insert_module_config": _insert_module_config,
-    "insert_connection": _insert_connection,
-    "insert_file_info": _insert_file_info,
-    "insert_metadata": _insert_metadata,
+    "insertConfig": _insert_config,
+    "insertModuleConfig": _insert_module_config,
+    "insertConnection": _insert_connection,
+    "insertFileInfo": _insert_file_info,
+    "insertMetadata": _insert_metadata,
 }
